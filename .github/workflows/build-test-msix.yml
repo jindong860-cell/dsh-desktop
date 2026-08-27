@@ -1,0 +1,23 @@
+name: Build test MSIX
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+      - name: Build signed test MSIX
+        shell: powershell
+        run: .\scripts\Build-Test-MSIX.ps1 -Version 2.3.6.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSH-Desktop-v2.3.6-test
+          path: |
+            dist/*.msix
+            dist/*.cer
+            scripts/Install-Test-MSIX.ps1
