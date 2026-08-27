@@ -1,0 +1,57 @@
+name: Windows full-flow validation
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  full-flow:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore v2.3.8 source
+        shell: powershell
+        run: |
+          $b64 = Get-Content .\ci-source.b64 -Raw
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\dsh-v238.zip", [Convert]::FromBase64String($b64))
+          Expand-Archive "$env:RUNNER_TEMP\dsh-v238.zip" .\src -Force
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+
+      - name: Rebuild Windows host from source
+        shell: powershell
+        working-directory: src
+        run: |
+          Push-Location host
+          $env:GOOS='windows'
+          $env:GOARCH='amd64'
+          go build -trimpath -ldflags='-s -w -H=windowsgui' -o ..\prebuilt\DSHDesktopHost.exe .
+          if ($LASTEXITCODE -ne 0) { throw 'Host build failed.' }
+          Pop-Location
+
+      - name: Build, sign, install and verify MSIX
+        shell: powershell
+        working-directory: src
+        run: .\scripts\Build-And-Install-Test-MSIX.ps1 -Version 2.3.8.0 -NoExplorer
+
+      - name: Deep runtime + WebView2 end-to-end test
+        shell: powershell
+        working-directory: src
+        run: .\scripts\Validate-Full-Flow.ps1 -Version 2.3.8.0 -DeepRuntimeTest -RuntimeRoot "$env:RUNNER_TEMP\DSHDesktop-E2E"
+
+      - name: Upload MSIX and validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DSH-Desktop-v2.3.8-full-flow
+          if-no-files-found: warn
+          path: |
+            src/dist/*.msix
+            src/dist/*.cer
+            src/build-install.log
+            src/full-flow-validation.log
+            ${{ runner.temp }}/DSHDesktop-E2E/logs/**
