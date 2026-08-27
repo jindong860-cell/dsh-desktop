@@ -11,12 +11,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore v2.3.8 source
+      - name: Restore v2.3.9 source
         shell: powershell
         run: |
           $b64 = Get-Content .\ci-source.b64 -Raw
-          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\dsh-v238.zip", [Convert]::FromBase64String($b64))
-          Expand-Archive "$env:RUNNER_TEMP\dsh-v238.zip" .\src -Force
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\dsh-v239.zip", [Convert]::FromBase64String($b64))
+          Expand-Archive "$env:RUNNER_TEMP\dsh-v239.zip" .\src -Force
 
       - uses: actions/setup-go@v5
         with:
@@ -33,38 +33,23 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Host build failed.' }
           Pop-Location
 
-      - name: Build sign install verify MSIX
+      - name: Build sign install and full verify
         shell: powershell
         working-directory: src
-        timeout-minutes: 10
-        run: .\scripts\Build-And-Install-Test-MSIX.ps1 -Version 2.3.8.0 -NoExplorer -SkipWebViewSmoke
+        timeout-minutes: 25
+        run: .\scripts\Build-And-Install-Test-MSIX.ps1 -Version 2.3.9.0 -NoExplorer
 
-      - name: WebView2 embedded navigation smoke
+      - name: Independent installed-app full-flow validation
         shell: powershell
         working-directory: src
-        timeout-minutes: 5
-        run: |
-          $pkg = Get-AppxPackage -Name 'DSHDesktop.MSIX' | Select-Object -First 1
-          if (-not $pkg) { throw 'MSIX not installed.' }
-          $hostExe = Join-Path $pkg.InstallLocation 'DSHDesktopHost.exe'
-          $proc = Start-Process -FilePath $hostExe -ArgumentList '-SelfTestWebView' -PassThru
-          if (-not $proc.WaitForExit(240000)) {
-            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
-            throw 'WebView2 smoke process timed out.'
-          }
-          if ($proc.ExitCode -ne 0) { throw ('WebView2 smoke failed with exit code ' + $proc.ExitCode) }
-
-      - name: Deep runtime and WebView2 end-to-end test
-        shell: powershell
-        working-directory: src
-        timeout-minutes: 18
-        run: .\scripts\Validate-Full-Flow.ps1 -Version 2.3.8.0 -DeepRuntimeTest -RuntimeRoot "$env:RUNNER_TEMP\DSHDesktop-E2E"
+        timeout-minutes: 20
+        run: .\scripts\Validate-Full-Flow.ps1 -Version 2.3.9.0 -DeepRuntimeTest -RuntimeRoot "$env:RUNNER_TEMP\DSHDesktop-E2E"
 
       - name: Upload MSIX and validation logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: DSH-Desktop-v2.3.8-full-flow
+          name: DSH-Desktop-v2.3.9-full-flow
           if-no-files-found: warn
           path: |
             src/dist/*.msix
